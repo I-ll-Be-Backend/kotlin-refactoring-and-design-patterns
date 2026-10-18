@@ -1,0 +1,51 @@
+data class Order(val id: String, val total: Double, val postalCode: String)
+interface OrderRepo { fun today(): List<Order> }
+interface Warehouse { fun uploadCsv(csv: String) }
+/* application.yml
+export:
+  format: csv
+  delimiter: ","
+  header: true
+*/
+data class ExportConfig(
+    val format: String,
+    val delimiter: String,
+    val header: Boolean,
+)
+
+class OrderExport(cfg: ExportConfig) {
+    private val format = cfg.format
+    private val delimiter = cfg.delimiter
+    private val header = cfg.header
+
+    fun export(orders: List<Order>): String {
+        val out = StringBuilder()
+        if (header && format == "csv") {
+            out.append("id${delimiter}total${delimiter}postalCode\n")
+        }
+        for (o in orders) {
+            val row = when (format) {
+                "csv" -> "${o.id}$delimiter${o.total}" +
+                    "$delimiter${o.postalCode}"
+                "json" -> """{"id":"${o.id}","total":${o.total},""" +
+                    """ "postalCode":"${o.postalCode}"}"""
+                "xml" -> """<order id="${o.id}" total="${o.total}" """ +
+                    """postalCode="${o.postalCode}"/>"""
+                else -> throw IllegalArgumentException(format)
+            }
+            out.append(row).append("\n")
+        }
+        return out.toString()
+    }
+}
+
+class NightlyJob(
+    private val config: ExportConfig,
+    private val orders: OrderRepo,
+    private val warehouse: Warehouse,
+) {
+    fun run() {
+        val csv = OrderExport(config).export(orders.today())
+        warehouse.uploadCsv(csv)
+    }
+}
